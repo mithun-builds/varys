@@ -14,8 +14,9 @@ use serde::Serialize;
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 
+use crate::model;
 use crate::settings::{
-    KEY_MIC_PERMISSION_SEEN, KEY_ONBOARDING_DISMISSED, KEY_SCREEN_PERMISSION_SEEN,
+    KEY_HAS_RECORDED, KEY_MIC_PERMISSION_SEEN, KEY_ONBOARDING_DISMISSED, KEY_SCREEN_PERMISSION_SEEN,
 };
 use crate::state::AppState;
 
@@ -33,18 +34,35 @@ pub struct OnboardingStatus {
     pub screen_permission: PermState,
     pub mic_seen: bool,
     pub screen_seen: bool,
+    pub model_cached: bool,
+    pub has_recorded: bool,
     pub dismissed: bool,
 }
 
 #[tauri::command]
-pub fn onboarding_status(state: State<'_, Arc<AppState>>) -> OnboardingStatus {
+pub fn onboarding_status(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> OnboardingStatus {
+    let model = state.whisper_model();
     OnboardingStatus {
         mic_permission: check_mic_permission(),
         screen_permission: check_screen_recording_permission(),
         mic_seen: state.settings.get_bool(KEY_MIC_PERMISSION_SEEN, false),
         screen_seen: state.settings.get_bool(KEY_SCREEN_PERMISSION_SEEN, false),
+        model_cached: model::is_cached(&app, model),
+        has_recorded: state.settings.get_bool(KEY_HAS_RECORDED, false),
         dismissed: state.settings.get_bool(KEY_ONBOARDING_DISMISSED, false),
     }
+}
+
+/// True when all *required* prereqs are satisfied: mic + screen recording
+/// granted, the active Whisper model is cached on disk. Drives whether the
+/// onboarding window auto-opens on launch and whether the tray badge stays on.
+pub fn onboarding_complete(app: &AppHandle, state: &AppState) -> bool {
+    matches!(check_mic_permission(), PermState::Granted)
+        && matches!(check_screen_recording_permission(), PermState::Granted)
+        && model::is_cached(app, state.whisper_model())
 }
 
 #[tauri::command]
@@ -206,7 +224,10 @@ pub(crate) fn check_screen_recording_permission() -> PermState {
     PermState::Granted
 }
 
-/// True when *all* required permissions are granted. Drives the tray badge.
+/// True when *all* required permissions are granted. Now superseded by
+/// `onboarding_complete` (which also checks model cache); kept around for
+/// the tray badge in legacy code paths.
+#[allow(dead_code)]
 pub fn all_permissions_granted() -> bool {
     matches!(check_mic_permission(), PermState::Granted)
         && matches!(check_screen_recording_permission(), PermState::Granted)

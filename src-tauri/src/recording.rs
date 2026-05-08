@@ -10,6 +10,7 @@ use crate::audio_mixer::{run_mixer, MixerConfig};
 use crate::audio_system::SystemAudioRecorder;
 use crate::error::{Error, Result};
 use crate::onboarding::{check_mic_permission, check_screen_recording_permission, PermState};
+use crate::settings::KEY_HAS_RECORDED;
 use crate::state::AppState;
 use crate::storage::{build_recording_path, with_degraded_suffix};
 use crate::transcription;
@@ -142,6 +143,10 @@ impl RecordingSession {
         // commands. Errors land in the SharedStatus.
         if let Some(state) = app.try_state::<Arc<AppState>>() {
             let inner = state.inner().clone();
+            // Mark "first recording captured" so the onboarding wizard's last
+            // step ticks green. Subsequent recordings are no-ops here.
+            let _ = inner.settings.set(KEY_HAS_RECORDED, "true");
+
             let status = inner.transcription_status.clone();
             let cancel = inner.transcription_cancel.clone();
             let model = inner.whisper_model();

@@ -11,6 +11,7 @@ pub const KEY_WHISPER_MODEL: &str = "whisper_model";
 pub const KEY_ONBOARDING_DISMISSED: &str = "onboarding_dismissed";
 pub const KEY_MIC_PERMISSION_SEEN: &str = "mic_permission_seen";
 pub const KEY_SCREEN_PERMISSION_SEEN: &str = "screen_permission_seen";
+pub const KEY_HAS_RECORDED: &str = "has_recorded";
 
 pub const DEFAULT_MIC_GAIN: f32 = 0.5;
 pub const DEFAULT_SYS_GAIN: f32 = 0.5;

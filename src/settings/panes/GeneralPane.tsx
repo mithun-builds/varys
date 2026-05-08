@@ -16,7 +16,6 @@ export function GeneralPane() {
   });
   const [trState, setTrState] = useState<TranscriptionState>({ kind: "idle" });
   const [recordings, setRecordings] = useState<RecordingEntry[]>([]);
-  const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const refresh = async () => {
@@ -42,7 +41,7 @@ export function GeneralPane() {
     return () => clearInterval(id);
   }, []);
 
-  if (!s) return <div className="muted">Loading…</div>;
+  if (!s) return <div className="pane-loading">Loading…</div>;
 
   const pickFolder = async () => {
     const picked = await openDialog({
@@ -59,11 +58,10 @@ export function GeneralPane() {
   const updateGain = async (key: "mic_gain" | "sys_gain", value: number) => {
     const next = { ...s, [key]: value };
     setS(next);
-    setSaving(true);
     try {
       await tauri.setGains(next.mic_gain, next.sys_gain);
-    } finally {
-      setSaving(false);
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -84,138 +82,135 @@ export function GeneralPane() {
     }
   };
 
+  const transcribing =
+    trState.kind === "downloading_model" ||
+    trState.kind === "loading_model" ||
+    trState.kind === "transcribing";
+
   return (
     <>
-      <h2>General</h2>
+      <h1>General</h1>
 
-      <h3>Recording</h3>
-      <div className="row">
-        <button
-          className={`btn ${rec.is_recording ? "" : "btn-primary"}`}
-          onClick={toggle}
-          disabled={busy}
-        >
-          {busy ? "…" : rec.is_recording ? "■ Stop Recording" : "● Start Recording"}
-        </button>
-        <span className="muted" style={{ marginLeft: 12 }}>
-          {rec.is_recording ? "Capturing mic + system audio…" : "Idle"}
-        </span>
-      </div>
-      {rec.out_path && (
-        <div className="help">
-          Output: <span className="code">{rec.out_path}</span>
+      <div className="pane-section">
+        <h2>Recording</h2>
+        <div className="record-card">
+          <button
+            type="button"
+            className={`record-btn ${rec.is_recording ? "on" : ""}`}
+            onClick={toggle}
+            disabled={busy}
+          >
+            <span className="record-dot" />
+            {busy ? "…" : rec.is_recording ? "Stop Recording" : "Start Recording"}
+          </button>
+          <div className="record-meta">
+            {rec.is_recording
+              ? "Capturing mic + system audio"
+              : transcribing
+              ? "Idle (transcription running)"
+              : "Idle"}
+          </div>
         </div>
-      )}
+      </div>
 
-      <h3>Transcription</h3>
-      <TranscriptionStatus state={trState} />
+      <div className="pane-section">
+        <h2>Transcription</h2>
+        <TranscriptionStatus state={trState} onCancel={() => tauri.cancelTranscription().then(refresh)} />
+      </div>
 
-      <h3>Recordings</h3>
-      {recordings.length === 0 ? (
-        <div className="muted">No recordings yet.</div>
-      ) : (
-        <div>
-          {recordings.map((r) => (
-            <div className="perm-row" key={r.wav_path}>
-              <div className="perm-meta">
-                <span className="perm-title">{r.file_name}</span>
-                <span className="perm-detail">
-                  {r.has_transcript ? "Transcribed" : "Not transcribed"}
-                </span>
-              </div>
-              <div>
-                <button
-                  className="btn"
-                  onClick={() => tauri.openPath(r.wav_path)}
-                  title="Open the WAV in your default audio app"
-                >
+      <div className="pane-section">
+        <h2>Recordings</h2>
+        {recordings.length === 0 ? (
+          <div className="empty-hint">No recordings yet. Click Start Recording above.</div>
+        ) : (
+          <ul className="row-list">
+            {recordings.slice(0, 10).map((r) => (
+              <li className="row" key={r.wav_path}>
+                <div className="row-main">
+                  <div className="row-title">{r.file_name}</div>
+                  <div className="row-hint subtle">
+                    {r.has_transcript ? "Transcribed" : "Not transcribed"}
+                  </div>
+                </div>
+                <button className="secondary" onClick={() => tauri.openPath(r.wav_path)}>
                   Audio
                 </button>
                 {r.has_transcript && r.transcript_path ? (
-                  <button
-                    className="btn"
-                    style={{ marginLeft: 6 }}
-                    onClick={() => tauri.openPath(r.transcript_path!)}
-                  >
+                  <button className="secondary" onClick={() => tauri.openPath(r.transcript_path!)}>
                     Transcript
                   </button>
                 ) : (
                   <button
-                    className="btn btn-primary"
-                    style={{ marginLeft: 6 }}
-                    onClick={() =>
-                      tauri.transcribeExisting(r.wav_path).then(refresh)
-                    }
-                    disabled={trState.kind !== "idle" && trState.kind !== "done" && trState.kind !== "failed"}
+                    className="primary"
+                    onClick={() => tauri.transcribeExisting(r.wav_path).then(refresh)}
+                    disabled={transcribing}
                   >
                     Transcribe
                   </button>
                 )}
-              </div>
-            </div>
-          ))}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="pane-section">
+        <h2>Output folder</h2>
+        <div className="folder-row">
+          <code className="folder-path">{s.output_folder}</code>
+          <button className="secondary" onClick={pickFolder}>Choose…</button>
+          <button className="secondary" onClick={() => tauri.openOutputFolder()}>Reveal</button>
         </div>
-      )}
-
-      <h3>Output folder</h3>
-      <div className="row">
-        <input
-          type="text"
-          value={s.output_folder}
-          readOnly
-          className="input"
-        />
-        <button className="btn" onClick={pickFolder}>
-          Choose…
-        </button>
-        <button className="btn" onClick={() => tauri.openOutputFolder()}>
-          Reveal
-        </button>
-      </div>
-      <div className="help">
-        Recording saves <span className="code">.wav</span> (stereo: L=mic,
-        R=system) plus, after transcription, <span className="code">.txt</span>{" "}
-        and <span className="code">.json</span>.
+        <div className="hint subtle">
+          Each recording saves a stereo <code>.wav</code> (L=mic, R=system) plus a
+          markdown <code>.txt</code> and structured <code>.json</code> after
+          transcription.
+        </div>
       </div>
 
-      <h3>Mix levels</h3>
-      <div className="row">
-        <label>Microphone gain</label>
-        <input
-          type="range"
-          min={0}
-          max={2}
-          step={0.05}
-          value={s.mic_gain}
-          onChange={(e) => updateGain("mic_gain", parseFloat(e.target.value))}
-          className="slider"
-        />
-        <span className="code">{s.mic_gain.toFixed(2)}</span>
+      <div className="pane-section">
+        <h2>Mix levels</h2>
+        <div className="gain-row">
+          <label className="gain-label">Microphone</label>
+          <input
+            type="range"
+            min={0}
+            max={2}
+            step={0.05}
+            value={s.mic_gain}
+            onChange={(e) => updateGain("mic_gain", parseFloat(e.target.value))}
+          />
+          <code className="gain-value">{s.mic_gain.toFixed(2)}</code>
+        </div>
+        <div className="gain-row">
+          <label className="gain-label">System</label>
+          <input
+            type="range"
+            min={0}
+            max={2}
+            step={0.05}
+            value={s.sys_gain}
+            onChange={(e) => updateGain("sys_gain", parseFloat(e.target.value))}
+          />
+          <code className="gain-value">{s.sys_gain.toFixed(2)}</code>
+        </div>
       </div>
-      <div className="row">
-        <label>System gain</label>
-        <input
-          type="range"
-          min={0}
-          max={2}
-          step={0.05}
-          value={s.sys_gain}
-          onChange={(e) => updateGain("sys_gain", parseFloat(e.target.value))}
-          className="slider"
-        />
-        <span className="code">{s.sys_gain.toFixed(2)}</span>
-      </div>
-      {saving && <div className="muted help">Saving…</div>}
     </>
   );
 }
 
-function TranscriptionStatus({ state }: { state: TranscriptionState }) {
+function TranscriptionStatus({
+  state,
+  onCancel,
+}: {
+  state: TranscriptionState;
+  onCancel: () => void;
+}) {
   switch (state.kind) {
     case "idle":
       return (
-        <div className="muted">
-          No transcription running. Stop a recording to start one.
+        <div className="empty-hint">
+          No transcription running. Stop a recording to start one automatically.
         </div>
       );
     case "downloading_model": {
@@ -225,11 +220,11 @@ function TranscriptionStatus({ state }: { state: TranscriptionState }) {
           : 0;
       const mb = (n: number) => (n / 1024 / 1024).toFixed(0);
       return (
-        <div>
-          <div>
-            <span className="badge warn">Downloading model</span>
-            <span style={{ marginLeft: 8 }}>
-              small.en — {mb(state.done_bytes)} / {mb(state.total_bytes)} MB ({pct}%)
+        <div className="status-card">
+          <div className="status-line">
+            <span className="status-label">Downloading model</span>
+            <span className="status-detail">
+              {mb(state.done_bytes)} / {mb(state.total_bytes)} MB ({pct}%)
             </span>
           </div>
           <ProgressBar pct={pct} />
@@ -238,46 +233,49 @@ function TranscriptionStatus({ state }: { state: TranscriptionState }) {
     }
     case "loading_model":
       return (
-        <div>
-          <span className="badge warn">Loading model</span>
-          <span style={{ marginLeft: 8 }}>Initialising Metal…</span>
+        <div className="status-card">
+          <div className="status-line">
+            <span className="status-label">Loading model</span>
+            <span className="status-detail">Initialising Metal…</span>
+          </div>
         </div>
       );
     case "transcribing":
       return (
-        <div>
-          <div>
-            <span className="badge warn">Transcribing</span>
-            <span style={{ marginLeft: 8 }}>
-              Whispering… {state.progress_pct}%
-            </span>
+        <div className="status-card">
+          <div className="status-line">
+            <span className="status-label">Transcribing</span>
+            <span className="status-detail">Whispering… {state.progress_pct}%</span>
+            <button className="secondary" onClick={onCancel}>Cancel</button>
           </div>
           <ProgressBar pct={state.progress_pct} />
         </div>
       );
     case "done":
       return (
-        <div>
-          <span className="badge ok">Done</span>
-          <span style={{ marginLeft: 8 }}>
-            <span className="code">{state.transcript_path}</span>
-          </span>
-          <button
-            className="btn"
-            style={{ marginLeft: 10 }}
-            onClick={() => tauri.openPath(state.transcript_path)}
-          >
-            Open transcript
-          </button>
+        <div className="status-card status-card--ok">
+          <div className="status-line">
+            <span className="status-label">Done</span>
+            <code className="status-detail-mono">{state.transcript_path}</code>
+            <button className="secondary" onClick={() => tauri.openPath(state.transcript_path)}>
+              Open transcript
+            </button>
+          </div>
+        </div>
+      );
+    case "cancelled":
+      return (
+        <div className="status-card">
+          <div className="status-line">
+            <span className="status-label">Cancelled</span>
+            <span className="status-detail subtle">Transcription was aborted.</span>
+          </div>
         </div>
       );
     case "failed":
       return (
-        <div>
-          <span className="badge err">Failed</span>
-          <span style={{ marginLeft: 8 }} className="muted">
-            {state.message}
-          </span>
+        <div className="pane-error">
+          <strong>Transcription failed:</strong> {state.message}
         </div>
       );
   }
@@ -285,23 +283,8 @@ function TranscriptionStatus({ state }: { state: TranscriptionState }) {
 
 function ProgressBar({ pct }: { pct: number }) {
   return (
-    <div
-      style={{
-        height: 4,
-        background: "var(--bg-input)",
-        borderRadius: 2,
-        marginTop: 6,
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          width: `${Math.min(100, Math.max(0, pct))}%`,
-          height: "100%",
-          background: "var(--accent)",
-          transition: "width 200ms ease",
-        }}
-      />
+    <div className="progress-track">
+      <div className="progress-fill" style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
     </div>
   );
 }

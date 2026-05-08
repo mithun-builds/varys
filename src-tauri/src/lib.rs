@@ -45,8 +45,12 @@ pub fn run() {
             commands::cancel_transcription,
             commands::settings_set_whisper_model,
             commands::list_models,
+            commands::download_model,
             commands::list_recordings,
             commands::open_path,
+            commands::open_privacy_settings,
+            commands::restart_app,
+            commands::close_onboarding_window,
             onboarding::onboarding_status,
             onboarding::onboarding_dismiss,
             onboarding::request_mic_permission,
@@ -69,23 +73,32 @@ pub fn run() {
             app.manage(state.clone());
 
             tray::build_tray(app.handle())?;
-            tray::set_setup_needed(
-                app.handle(),
-                !onboarding::all_permissions_granted(),
-            );
 
-            // Permission watcher — re-checks every 3 s and flips the tray
-            // badge when state changes. Cheap; matches soll's cadence.
-            let app_for_perm = app.handle().clone();
+            // Initial onboarding state — open the wizard if any prereq is
+            // missing AND the user hasn't already dismissed it. The dismissed
+            // flag persists across launches so opted-out users aren't nagged,
+            // but the tray badge stays on so they can re-open via the menu.
+            let initial_complete = onboarding::onboarding_complete(app.handle(), &state);
+            let dismissed = state
+                .settings
+                .get_bool(crate::settings::KEY_ONBOARDING_DISMISSED, false);
+            tray::set_setup_needed(app.handle(), !initial_complete);
+            if !initial_complete && !dismissed {
+                tray::open_onboarding_window(app.handle());
+            }
+
+            // Onboarding watcher — every 2 s, re-derive completeness; flip
+            // the tray badge when state changes. Cheap; matches soll's cadence.
+            let app_for_ob = app.handle().clone();
+            let state_for_ob = state.clone();
             tauri::async_runtime::spawn(async move {
                 use std::time::Duration;
-                let mut prev = onboarding::all_permissions_granted();
-                tray::set_setup_needed(&app_for_perm, !prev);
+                let mut prev = onboarding::onboarding_complete(&app_for_ob, &state_for_ob);
                 loop {
-                    tokio::time::sleep(Duration::from_secs(3)).await;
-                    let current = onboarding::all_permissions_granted();
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    let current = onboarding::onboarding_complete(&app_for_ob, &state_for_ob);
                     if current != prev {
-                        tray::set_setup_needed(&app_for_perm, !current);
+                        tray::set_setup_needed(&app_for_ob, !current);
                         prev = current;
                     }
                 }

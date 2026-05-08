@@ -2,10 +2,11 @@
 //! through one of these. Keeps the boundary thin and well-typed.
 
 use crate::error::Error;
-use crate::model::WhisperModel;
+use crate::model::{self, WhisperModel};
 use crate::recording::RecordingSession;
 use crate::settings::{KEY_MIC_GAIN, KEY_OUTPUT_FOLDER, KEY_SYS_GAIN, KEY_WHISPER_MODEL};
 use crate::state::AppState;
+use crate::transcription::TranscriptionState;
 use crate::tray::{self, MeetingPlatform};
 use serde::Serialize;
 use std::sync::atomic::Ordering;
@@ -45,20 +46,77 @@ pub fn settings_set_whisper_model(
 }
 
 #[derive(Serialize)]
-pub struct ModelOption {
+pub struct ModelInfo {
     pub id: String,
-    pub display_name: String,
+    pub short_name: String,
+    pub size_label: String,
+    pub is_cached: bool,
+    pub is_active: bool,
 }
 
 #[tauri::command]
-pub fn list_models() -> Vec<ModelOption> {
+pub fn list_models(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Vec<ModelInfo> {
+    let active = state.whisper_model();
     [WhisperModel::TinyEn, WhisperModel::SmallEn, WhisperModel::MediumEn]
         .into_iter()
-        .map(|m| ModelOption {
+        .map(|m| ModelInfo {
             id: m.id().to_string(),
-            display_name: m.display_name().to_string(),
+            short_name: m.short_name().to_string(),
+            size_label: m.size_label().to_string(),
+            is_cached: model::is_cached(&app, m),
+            is_active: m == active,
         })
         .collect()
+}
+
+/// Kick off a background download of `id` if not already cached. Status
+/// surfaces via `transcription_status` (we reuse the same state to avoid
+/// inventing a parallel download channel).
+#[tauri::command]
+pub async fn download_model(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    id: String,
+) -> Result<(), String> {
+    let m = WhisperModel::from_id(&id).ok_or_else(|| format!("unknown model: {id}"))?;
+    if model::is_cached(&app, m) {
+        return Ok(());
+    }
+    let status = state.transcription_status.clone();
+    let model_id = m.id().to_string();
+    *status.lock() = TranscriptionState::DownloadingModel {
+        model: model_id.clone(),
+        done_bytes: 0,
+        total_bytes: 0,
+    };
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let status_dl = status.clone();
+        let progress_id = model_id.clone();
+        let result = model::ensure_model(&app_clone, m, move |done, total| {
+            *status_dl.lock() = TranscriptionState::DownloadingModel {
+                model: progress_id.clone(),
+                done_bytes: done,
+                total_bytes: total,
+            };
+        })
+        .await;
+        match result {
+            Ok(_) => {
+                *status.lock() = TranscriptionState::Idle;
+                log::info!("model {model_id} downloaded");
+            }
+            Err(e) => {
+                *status.lock() = TranscriptionState::Failed {
+                    message: format!("model download: {e:#}"),
+                };
+            }
+        }
+    });
+    Ok(())
 }
 
 #[tauri::command]
@@ -286,5 +344,33 @@ pub fn close_settings_window(app: AppHandle) {
     if let Some(window) = tauri::Manager::get_webview_window(&app, "settings") {
         let _ = window.hide();
     }
+}
+
+#[tauri::command]
+pub fn close_onboarding_window(app: AppHandle) {
+    if let Some(window) = tauri::Manager::get_webview_window(&app, "onboarding") {
+        let _ = window.hide();
+    }
+}
+
+#[tauri::command]
+pub fn open_privacy_settings(section: String) {
+    // Whitelist the section names we actually use to avoid arbitrary
+    // x-apple.systempreferences URLs from the renderer.
+    let suffix = match section.as_str() {
+        "Privacy_Microphone" => "Privacy_Microphone",
+        "Privacy_ScreenCapture" => "Privacy_ScreenCapture",
+        _ => return,
+    };
+    let _ = std::process::Command::new("open")
+        .arg(format!(
+            "x-apple.systempreferences:com.apple.preference.security?{suffix}"
+        ))
+        .spawn();
+}
+
+#[tauri::command]
+pub fn restart_app(app: AppHandle) {
+    app.restart();
 }
 

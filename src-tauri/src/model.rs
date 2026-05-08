@@ -56,11 +56,28 @@ impl WhisperModel {
         }
     }
 
+    #[allow(dead_code)]
     pub fn display_name(&self) -> &'static str {
         match self {
             Self::TinyEn => "Tiny — fastest (39 MB, ~3x faster, lower accuracy)",
             Self::SmallEn => "Small — balanced (466 MB, default)",
             Self::MediumEn => "Medium — most accurate (1.4 GB, ~2x slower)",
+        }
+    }
+
+    pub fn short_name(&self) -> &'static str {
+        match self {
+            Self::TinyEn => "Tiny",
+            Self::SmallEn => "Small",
+            Self::MediumEn => "Medium",
+        }
+    }
+
+    pub fn size_label(&self) -> &'static str {
+        match self {
+            Self::TinyEn => "39 MB",
+            Self::SmallEn => "466 MB",
+            Self::MediumEn => "1.4 GB",
         }
     }
 }

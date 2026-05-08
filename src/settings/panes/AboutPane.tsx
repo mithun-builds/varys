@@ -10,19 +10,44 @@ export function AboutPane() {
 
   return (
     <>
-      <h2>About</h2>
-      <div className="row">
-        <label>Version</label>
-        <span className="code">{version}</span>
+      <h1>About</h1>
+
+      <div className="pane-section">
+        <div className="row-list">
+          <div className="row">
+            <div className="row-main">
+              <div className="row-title">Version</div>
+              <div className="row-hint subtle">Lord Varys v{version}</div>
+            </div>
+          </div>
+          <div className="row">
+            <div className="row-main">
+              <div className="row-title">Source</div>
+              <div className="row-hint subtle">github.com/mithun-builds/varys</div>
+            </div>
+            <button
+              className="secondary"
+              onClick={() => tauri.openUrl("https://github.com/mithun-builds/varys")}
+            >
+              Open
+            </button>
+          </div>
+          <div className="row">
+            <div className="row-main">
+              <div className="row-title">Update via Homebrew</div>
+              <div className="row-hint subtle">
+                <code>brew upgrade --cask varys</code>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-      <div className="row">
-        <label>Status</label>
-        <span className="muted">Milestone 1 — capture only (no transcription yet)</span>
-      </div>
-      <div className="muted help" style={{ marginTop: 24, lineHeight: 1.6 }}>
-        Lord Varys is an ambient memory layer for work. Detect meeting → silently
-        capture system + microphone audio → save WAV. Transcription, summaries,
-        and semantic search land in future milestones.
+
+      <div className="hint subtle" style={{ lineHeight: 1.6 }}>
+        Lord Varys is an ambient memory layer for work — silently captures
+        microphone and system audio when you click Start, transcribes locally
+        with whisper.cpp, and writes timestamped transcripts beside each WAV.
+        Nothing leaves your machine.
       </div>
     </>
   );

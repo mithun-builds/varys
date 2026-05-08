@@ -20,6 +20,7 @@ const TRAY_ID: &str = "lord-varys-tray";
 
 pub const MENU_ID_TOGGLE: &str = "toggle_recording";
 pub const MENU_ID_SETTINGS: &str = "settings";
+pub const MENU_ID_ONBOARDING: &str = "onboarding";
 pub const MENU_ID_QUIT: &str = "quit";
 
 static IMG_IDLE: Lazy<Image<'static>> =
@@ -43,6 +44,11 @@ static STATUS_ITEM: OnceCell<MenuItem<Wry>> = OnceCell::new();
 /// "Start Recording" / "Stop Recording" menu item — label + enabled state get
 /// flipped when the recording state changes.
 static TOGGLE_ITEM: OnceCell<MenuItem<Wry>> = OnceCell::new();
+
+/// Live handles to the menu so we can swap "Setup Guide…" on/off when the
+/// user finishes onboarding (similar to soll's pattern).
+static TRAY_MENU: Lazy<parking_lot::Mutex<Option<Menu<Wry>>>> =
+    Lazy::new(|| parking_lot::Mutex::new(None));
 
 #[derive(Copy, Clone, Debug)]
 pub enum TrayState {
@@ -100,6 +106,7 @@ impl TrayState {
 
 pub fn build_tray(app: &AppHandle) -> Result<()> {
     let menu = build_menu(app)?;
+    *TRAY_MENU.lock() = Some(menu.clone());
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(IMG_IDLE.clone())
         .icon_as_template(false)
@@ -111,6 +118,7 @@ pub fn build_tray(app: &AppHandle) -> Result<()> {
             match id {
                 MENU_ID_QUIT => app.exit(0),
                 MENU_ID_SETTINGS => open_settings_window(app),
+                MENU_ID_ONBOARDING => open_onboarding_window(app),
                 MENU_ID_TOGGLE => {
                     let app_clone = app.clone();
                     tauri::async_runtime::spawn(async move {
@@ -127,6 +135,18 @@ pub fn build_tray(app: &AppHandle) -> Result<()> {
 
     set_state(app, TrayState::Idle);
     Ok(())
+}
+
+fn rebuild_menu(app: &AppHandle) {
+    match build_menu(app) {
+        Ok(menu) => {
+            *TRAY_MENU.lock() = Some(menu.clone());
+            if let Some(tray) = app.tray_by_id(TRAY_ID) {
+                let _ = tray.set_menu(Some(menu));
+            }
+        }
+        Err(e) => log::error!("rebuild_menu: {e:?}"),
+    }
 }
 
 pub fn set_state(app: &AppHandle, state: TrayState) {
@@ -172,6 +192,7 @@ pub fn set_setup_needed(app: &AppHandle, needed: bool) {
     let prev = SETUP_NEEDED.swap(needed, Ordering::SeqCst);
     if prev != needed {
         apply_icon(app);
+        rebuild_menu(app);
     }
 }
 
@@ -199,23 +220,38 @@ fn build_menu(app: &AppHandle) -> Result<Menu<Wry>> {
     let sep2 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, MENU_ID_QUIT, "Quit Lord Varys", true, Some("Cmd+Q"))?;
 
-    Menu::with_items(
-        app,
-        &[
-            &status_item as &dyn tauri::menu::IsMenuItem<Wry>,
-            &toggle_item,
-            &sep,
-            &settings,
-            &sep2,
-            &quit,
-        ],
-    )
-    .map_err(Into::into)
+    // Setup Guide entry only renders while onboarding is incomplete (matches
+    // soll's pattern). Drops out of the menu cleanly once everything is set.
+    let onboarding = if SETUP_NEEDED.load(Ordering::SeqCst) {
+        Some(MenuItem::with_id(
+            app,
+            MENU_ID_ONBOARDING,
+            "🔴  Setup Guide…",
+            true,
+            None::<&str>,
+        )?)
+    } else {
+        None
+    };
+
+    let mut items: Vec<&dyn tauri::menu::IsMenuItem<Wry>> = vec![
+        &status_item,
+        &toggle_item,
+        &sep,
+        &settings,
+    ];
+    if let Some(ref ob) = onboarding {
+        items.push(ob);
+    }
+    items.push(&sep2);
+    items.push(&quit);
+
+    Menu::with_items(app, &items).map_err(Into::into)
 }
 
 pub fn open_settings_window(app: &AppHandle) {
     activate_app();
-    let (cx, cy) = compute_center_position(app, 720.0, 560.0);
+    let (cx, cy) = compute_center_position(app, 760.0, 600.0);
 
     if let Some(existing) = app.get_webview_window("settings") {
         let _ = existing.set_position(tauri::LogicalPosition::new(cx, cy));
@@ -226,8 +262,8 @@ pub fn open_settings_window(app: &AppHandle) {
     let url = WebviewUrl::App("index.html?view=settings".into());
     match WebviewWindowBuilder::new(app, "settings", url)
         .title("Lord Varys — Settings")
-        .inner_size(720.0, 560.0)
-        .min_inner_size(560.0, 460.0)
+        .inner_size(760.0, 600.0)
+        .min_inner_size(620.0, 480.0)
         .position(cx, cy)
         .visible(false)
         .resizable(true)
@@ -239,6 +275,35 @@ pub fn open_settings_window(app: &AppHandle) {
             log::info!("opened settings window");
         }
         Err(e) => log::error!("open settings window: {e:?}"),
+    }
+}
+
+pub fn open_onboarding_window(app: &AppHandle) {
+    activate_app();
+    let (cx, cy) = compute_center_position(app, 560.0, 680.0);
+
+    if let Some(existing) = app.get_webview_window("onboarding") {
+        let _ = existing.set_position(tauri::LogicalPosition::new(cx, cy));
+        let _ = existing.show();
+        let _ = existing.set_focus();
+        return;
+    }
+    let url = WebviewUrl::App("index.html?view=onboarding".into());
+    match WebviewWindowBuilder::new(app, "onboarding", url)
+        .title("Lord Varys — Setup Guide")
+        .inner_size(560.0, 680.0)
+        .min_inner_size(440.0, 540.0)
+        .position(cx, cy)
+        .visible(false)
+        .resizable(true)
+        .build()
+    {
+        Ok(window) => {
+            let _ = window.show();
+            let _ = window.set_focus();
+            log::info!("opened onboarding window");
+        }
+        Err(e) => log::error!("open onboarding window: {e:?}"),
     }
 }
 

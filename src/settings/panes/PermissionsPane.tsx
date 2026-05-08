@@ -4,11 +4,11 @@ import { tauri, OnboardingStatus, PermState } from "../../tauri";
 function badgeFor(state: PermState) {
   switch (state) {
     case "granted":
-      return <span className="badge ok">Granted</span>;
+      return <span className="ob-badge ob-badge--done">Granted</span>;
     case "denied":
-      return <span className="badge err">Denied</span>;
+      return <span className="ob-badge ob-badge--denied">Denied</span>;
     default:
-      return <span className="badge warn">Not yet asked</span>;
+      return <span className="ob-badge ob-badge--pending">Not yet asked</span>;
   }
 }
 
@@ -30,7 +30,7 @@ export function PermissionsPane() {
     return () => clearInterval(id);
   }, []);
 
-  if (!status) return <div className="muted">Loading…</div>;
+  if (!status) return <div className="pane-loading">Loading…</div>;
 
   const probeScreen = async () => {
     setProbing(true);
@@ -44,47 +44,61 @@ export function PermissionsPane() {
 
   return (
     <>
-      <h2>Permissions</h2>
-      <div className="muted help" style={{ marginBottom: 16 }}>
+      <h1>Permissions</h1>
+      <div className="hint subtle" style={{ marginTop: -8 }}>
         Lord Varys needs both microphone and screen recording access to capture
         the full audio mix. macOS shows the prompts the first time each
         subsystem is invoked.
       </div>
 
-      <div className="perm-row">
-        <div className="perm-meta">
-          <span className="perm-title">Microphone</span>
-          <span className="perm-detail">Captures your voice during recordings.</span>
+      <div className="row-list">
+        <div className="row column">
+          <div className="row-clickable" style={{ cursor: "default" }}>
+            <div className="row-main">
+              <div className="row-title">Microphone</div>
+              <div className="row-hint subtle">
+                Captures your voice during recordings.
+              </div>
+            </div>
+            {badgeFor(status.mic_permission)}
+            <button className="secondary" onClick={() => tauri.requestMic().then(refresh)}>
+              Request
+            </button>
+            <button
+              className="secondary"
+              onClick={() => tauri.openPrivacySettings("Privacy_Microphone")}
+            >
+              System Settings
+            </button>
+          </div>
         </div>
-        <div>
-          {badgeFor(status.mic_permission)}
-          <button className="btn" onClick={() => tauri.requestMic().then(refresh)}>
-            Request
-          </button>
+
+        <div className="row column">
+          <div className="row-clickable" style={{ cursor: "default" }}>
+            <div className="row-main">
+              <div className="row-title">Screen Recording</div>
+              <div className="row-hint subtle">
+                Required by ScreenCaptureKit for capturing system / speaker audio.
+                Video frames are never stored.
+              </div>
+            </div>
+            {badgeFor(status.screen_permission)}
+            <button className="secondary" onClick={probeScreen} disabled={probing}>
+              {probing ? "Probing…" : "Request"}
+            </button>
+            <button
+              className="secondary"
+              onClick={() => tauri.openPrivacySettings("Privacy_ScreenCapture")}
+            >
+              System Settings
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="perm-row">
-        <div className="perm-meta">
-          <span className="perm-title">Screen Recording</span>
-          <span className="perm-detail">
-            Required by ScreenCaptureKit for capturing system/speaker audio.
-            Video frames are never stored.
-          </span>
-        </div>
-        <div>
-          {badgeFor(status.screen_permission)}
-          <button className="btn" onClick={probeScreen} disabled={probing}>
-            {probing ? "Probing…" : "Request"}
-          </button>
-          <button
-            className="btn"
-            onClick={() => tauri.openScreenRecordingSettings()}
-            style={{ marginLeft: 6 }}
-          >
-            Open Settings
-          </button>
-        </div>
+      <div className="hint subtle">
+        Screen Recording requires a restart after granting. Use the menu bar's
+        Quit option, then relaunch.
       </div>
     </>
   );

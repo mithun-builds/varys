@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Tray app + dynamically-created Settings window",
-  "windows": ["settings"],
+  "windows": ["settings", "onboarding"],
   "permissions": [
     "core:default",
     "core:window:allow-show",
