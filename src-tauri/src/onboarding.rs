@@ -145,17 +145,18 @@ pub fn open_screen_recording_settings() {
     }
 }
 
-/// Probe ScreenCaptureKit by spawning the sidecar in `--probe` mode for a
-/// brief moment. macOS shows the consent dialog the first time SCKit is
-/// invoked from this app's bundle; subsequent calls return immediately.
+/// Probe ScreenCaptureKit by spawning the sidecar in `--probe` mode. macOS
+/// shows the consent dialog the first time SCKit is invoked from this app's
+/// bundle; subsequent calls return immediately. We don't await the probe —
+/// the dialog appears asynchronously and the polling status loop picks up
+/// the new permission state.
 #[tauri::command]
-pub async fn request_screen_recording_permission(
+pub fn request_screen_recording_permission(
+    app: AppHandle,
     state: State<'_, Arc<AppState>>,
-) -> Result<bool, String> {
+) -> Result<(), String> {
     let _ = state.settings.set(KEY_SCREEN_PERMISSION_SEEN, "true");
-    crate::audio_system::probe_permission()
-        .await
-        .map_err(|e| e.to_string())
+    crate::audio_system::probe_permission(&app).map_err(|e| e.to_string())
 }
 
 // ── permission status checks ──────────────────────────────────────────────

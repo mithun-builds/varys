@@ -140,29 +140,41 @@ impl SystemAudioRecorder {
 }
 
 /// Probe Screen Recording permission by spawning the sidecar in `--probe`
-/// mode for ~500 ms. macOS shows the consent dialog on the first invocation
-/// against a given code-signed bundle. Returns true if SCKit is reachable.
-pub async fn probe_permission() -> Result<bool> {
-    // Probe doesn't need an AppHandle — we resolve the dev fallback paths
-    // since the user is most likely in `tauri:dev` when this fires the first
-    // time.
-    let bin = resolve_sidecar_path_dev_fallback()?;
-    let status = Command::new(&bin)
+/// mode. macOS shows the consent dialog on the first invocation against a
+/// given code-signed bundle. We fire-and-forget — the dialog appears
+/// asynchronously, the user clicks Allow/Deny, and the next call to
+/// `CGPreflightScreenCaptureAccess` (polled by the React UI every 2 s)
+/// picks up the new state. Waiting for the probe to exit was both racy and
+/// caused fake "timeout" errors when the user was slow on the prompt.
+pub fn probe_permission(app: &AppHandle) -> Result<()> {
+    let bin = resolve_sidecar_path(app)?;
+    log::info!("probing screen recording via {}", bin.display());
+    Command::new(&bin)
         .arg("--probe")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .kill_on_drop(true)
-        .status();
-    match tokio::time::timeout(std::time::Duration::from_secs(3), status).await {
-        Ok(Ok(s)) => Ok(s.success()),
-        Ok(Err(e)) => Err(anyhow!("probe failed: {e}")),
-        Err(_) => Err(anyhow!("probe timed out")),
-    }
+        .spawn()
+        .with_context(|| format!("spawn probe at {}", bin.display()))?;
+    Ok(())
 }
 
 fn resolve_sidecar_path(app: &AppHandle) -> Result<PathBuf> {
-    // Bundled location (production): Tauri places externalBin under the
-    // app's Resources dir with a triple suffix it strips at invocation.
+    // Production: Tauri places externalBin sidecars next to the main binary
+    // in Contents/MacOS/, NOT in Contents/Resources/. Look there first.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            for name in ["sckit_capture", "sckit_capture-aarch64-apple-darwin", "sckit_capture-x86_64-apple-darwin"] {
+                let p = parent.join(name);
+                if p.exists() {
+                    return Ok(p);
+                }
+            }
+        }
+    }
+
+    // Tauri's resource resolver — covers any case where bundle layout shifts
+    // in a future Tauri version. Cheap to check.
     if let Ok(p) = app
         .path()
         .resolve("sckit_capture", tauri::path::BaseDirectory::Resource)
@@ -171,16 +183,33 @@ fn resolve_sidecar_path(app: &AppHandle) -> Result<PathBuf> {
             return Ok(p);
         }
     }
+
     resolve_sidecar_path_dev_fallback()
 }
 
 fn resolve_sidecar_path_dev_fallback() -> Result<PathBuf> {
+    // CARGO_MANIFEST_DIR is reliable across `tauri dev` cwd weirdness.
+    #[cfg(debug_assertions)]
+    {
+        let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        for rel in [
+            "binaries/sckit_capture-aarch64-apple-darwin",
+            "binaries/sckit_capture-x86_64-apple-darwin",
+            "binaries/sckit_capture",
+            "swift-helper/.build/release/sckit_capture",
+            "swift-helper/.build/debug/sckit_capture",
+        ] {
+            let p = manifest.join(rel);
+            if p.exists() {
+                return Ok(p);
+            }
+        }
+    }
+
     let candidates = [
-        // Where the dev workflow drops the binary (see README build steps).
         "src-tauri/binaries/sckit_capture-aarch64-apple-darwin",
         "src-tauri/binaries/sckit_capture-x86_64-apple-darwin",
         "src-tauri/binaries/sckit_capture",
-        // SwiftPM build output, used while iterating on the helper alone.
         "src-tauri/swift-helper/.build/release/sckit_capture",
         "src-tauri/swift-helper/.build/debug/sckit_capture",
     ];
@@ -190,9 +219,6 @@ fn resolve_sidecar_path_dev_fallback() -> Result<PathBuf> {
         if p.exists() {
             return Ok(p);
         }
-        // Also try one level up — `pnpm tauri:dev` runs from the repo root,
-        // but `cargo run` from `src-tauri/` is convenient for sidecar
-        // iteration.
         if let Some(parent) = cwd.parent() {
             let p2 = parent.join(rel);
             if p2.exists() {

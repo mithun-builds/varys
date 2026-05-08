@@ -1,7 +1,7 @@
 {
   "name": "lord-varys",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Ambient meeting memory — silent capture for Meet, Zoom, and Teams.",
   "type": "module",
   "scripts": {

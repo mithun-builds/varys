@@ -82,7 +82,7 @@ export const tauri = {
   onboardingDismiss: () => invoke<void>("onboarding_dismiss"),
   requestMic: () => invoke<void>("request_mic_permission"),
   requestScreenRecording: () =>
-    invoke<boolean>("request_screen_recording_permission"),
+    invoke<void>("request_screen_recording_permission"),
   openScreenRecordingSettings: () =>
     invoke<void>("open_screen_recording_settings"),
 };
