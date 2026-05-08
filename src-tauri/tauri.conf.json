@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Lord Varys",
+  "version": "0.1.0",
+  "identifier": "com.lordvarys.app",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "category": "Productivity",
+    "icon": ["icons/icon.icns", "icons/icon.png"],
+    "resources": ["resources/ggml-metal.metal"],
+    "externalBin": ["binaries/sckit_capture"],
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "entitlements": "entitlements.plist",
+      "exceptionDomain": "",
+      "infoPlist": "./Info.plist"
+    }
+  }
+}

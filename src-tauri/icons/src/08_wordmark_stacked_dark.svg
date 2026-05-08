@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 290 170" width="290" height="170">
+  <rect width="290" height="170" fill="#0A0A0A"/>
+  <g transform="translate(145, 60)">
+    <g fill="#FAFAFA" stroke="none">
+      <circle cx="26" cy="0" r="1.7"/>
+      <circle cx="18.4" cy="-18.4" r="1.7"/>
+      <circle cx="0" cy="-26" r="1.7"/>
+      <circle cx="-18.4" cy="-18.4" r="1.7"/>
+      <circle cx="-26" cy="0" r="1.7"/>
+      <circle cx="-18.4" cy="18.4" r="1.7"/>
+      <circle cx="0" cy="26" r="1.7"/>
+      <circle cx="18.4" cy="18.4" r="1.7"/>
+    </g>
+    <g stroke="#FAFAFA" stroke-width="0.5" fill="none" opacity="0.5">
+      <line x1="26" y1="0" x2="6" y2="0"/>
+      <line x1="18.4" y1="-18.4" x2="4.2" y2="-4.2"/>
+      <line x1="0" y1="-26" x2="0" y2="-6"/>
+      <line x1="-18.4" y1="-18.4" x2="-4.2" y2="-4.2"/>
+      <line x1="-26" y1="0" x2="-6" y2="0"/>
+      <line x1="-18.4" y1="18.4" x2="-4.2" y2="4.2"/>
+      <line x1="0" y1="26" x2="0" y2="6"/>
+      <line x1="18.4" y1="18.4" x2="4.2" y2="4.2"/>
+    </g>
+    <circle cx="0" cy="0" r="4.5" fill="none" stroke="#FAFAFA" stroke-width="0.75"/>
+    <circle cx="0" cy="0" r="1.7" fill="#FAFAFA"/>
+  </g>
+  <text x="145" y="122" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" font-weight="500" fill="#FAFAFA" letter-spacing="-0.01em">Lord Varys</text>
+  <text x="145" y="146" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="400" fill="#999" letter-spacing="0.18em">MEETING MEMORY</text>
+</svg>

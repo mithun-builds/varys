@@ -1,0 +1,11 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/Cargo.lock
+src-tauri/swift-helper/.build/
+src-tauri/swift-helper/.swiftpm/
+src-tauri/binaries/
+recordings/
+.DS_Store
+*.log
+*.wav
