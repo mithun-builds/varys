@@ -17,6 +17,7 @@ export interface GeneralSettings {
   mic_gain: number;
   sys_gain: number;
   whisper_model: string;
+  auto_delete_days: number;
 }
 
 export interface RecordingStatus {
@@ -54,6 +55,8 @@ export const tauri = {
     invoke<void>("settings_set_output_folder", { path }),
   setGains: (mic_gain: number, sys_gain: number) =>
     invoke<void>("settings_set_gains", { micGain: mic_gain, sysGain: sys_gain }),
+  setAutoDeleteDays: (days: number) =>
+    invoke<void>("settings_set_auto_delete_days", { days }),
   setWhisperModel: (model: string) =>
     invoke<void>("settings_set_whisper_model", { model }),
   openOutputFolder: () => invoke<void>("open_output_folder"),
@@ -67,7 +70,10 @@ export const tauri = {
   closeOnboardingWindow: () => invoke<void>("close_onboarding_window"),
 
   recordingStatus: () => invoke<RecordingStatus>("recording_status"),
-  startRecording: () => invoke<void>("start_recording"),
+  /** Pass an optional `name` to label the resulting WAV / transcript. Empty
+   *  or undefined falls back to the "manual" slug. */
+  startRecording: (name?: string) =>
+    invoke<void>("start_recording", name ? { name } : {}),
   stopRecording: () => invoke<void>("stop_recording"),
   transcriptionStatus: () => invoke<TranscriptionState>("transcription_status"),
   cancelTranscription: () => invoke<void>("cancel_transcription"),

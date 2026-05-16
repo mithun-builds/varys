@@ -51,6 +51,59 @@ fn slugify(title: &str) -> String {
     out
 }
 
+/// Sweep `dir` for recording artifacts older than `days` days and delete
+/// them. Skips files that don't match our extensions (`.wav`, `.txt`,
+/// `.json`) so user-managed siblings in the same folder stay untouched.
+///
+/// Returns the number of deleted files; logs each one at info level.
+/// Safe to call with `days = 0` — short-circuits to 0 with no FS work.
+pub fn sweep_old_recordings(dir: &Path, days: u32) -> std::io::Result<usize> {
+    if days == 0 {
+        return Ok(0);
+    }
+    let threshold = std::time::SystemTime::now()
+        .checked_sub(std::time::Duration::from_secs(days as u64 * 24 * 60 * 60))
+        .unwrap_or(std::time::UNIX_EPOCH);
+
+    let entries = match std::fs::read_dir(dir) {
+        Ok(it) => it,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(e) => return Err(e),
+    };
+
+    let mut count = 0usize;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if !matches!(ext.as_str(), "wav" | "txt" | "json") {
+            continue;
+        }
+        let modified = match entry.metadata().and_then(|m| m.modified()) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        if modified < threshold {
+            match std::fs::remove_file(&path) {
+                Ok(()) => {
+                    log::info!("auto-delete: removed {}", path.display());
+                    count += 1;
+                }
+                Err(e) => {
+                    log::warn!("auto-delete failed for {}: {e}", path.display());
+                }
+            }
+        }
+    }
+    Ok(count)
+}
+
 /// Default output folder: a `recordings/` directory at the project root.
 ///
 /// Resolved at compile time via `CARGO_MANIFEST_DIR` (which points at

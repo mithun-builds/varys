@@ -32,6 +32,7 @@ pub fn run() {
             commands::settings_general_get,
             commands::settings_set_output_folder,
             commands::settings_set_gains,
+            commands::settings_set_auto_delete_days,
             commands::open_output_folder,
             commands::open_url,
             commands::app_version,
@@ -86,6 +87,35 @@ pub fn run() {
             if !initial_complete && !dismissed {
                 tray::open_onboarding_window(app.handle());
             }
+
+            // Auto-delete sweeper — runs at startup and every 6 hours after.
+            // Reads `auto_delete_days` from settings each tick so changes to
+            // the slider take effect on the next cycle without restart.
+            // Setting 0 = disabled; the sweep short-circuits.
+            let app_for_sweep = app.handle().clone();
+            let state_for_sweep = state.clone();
+            tauri::async_runtime::spawn(async move {
+                use std::time::Duration;
+                // Skip the very first tick by ~30s so we don't compete with
+                // app launch + frontend boot for disk I/O.
+                tokio::time::sleep(Duration::from_secs(30)).await;
+                loop {
+                    let days = state_for_sweep.auto_delete_days();
+                    let out_dir = state_for_sweep.output_folder();
+                    if days > 0 {
+                        match storage::sweep_old_recordings(&out_dir, days) {
+                            Ok(0) => {}
+                            Ok(n) => log::info!("auto-delete: cleaned {n} stale files"),
+                            Err(e) => log::warn!("auto-delete sweep: {e}"),
+                        }
+                    }
+                    tokio::time::sleep(Duration::from_secs(6 * 60 * 60)).await;
+                    // Keep the app handle alive even when it's unused (e.g.
+                    // when `days == 0`) so the sweeper can pick up a future
+                    // toggle without restart.
+                    let _ = &app_for_sweep;
+                }
+            });
 
             // Onboarding watcher — every 2 s, re-derive completeness; flip
             // the tray badge when state changes. Cheap; matches soll's cadence.

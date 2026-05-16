@@ -7,8 +7,8 @@ use tauri::{AppHandle, Manager};
 use crate::model::WhisperModel;
 use crate::recording::RecordingSession;
 use crate::settings::{
-    Settings, DEFAULT_MIC_GAIN, DEFAULT_SYS_GAIN, KEY_MIC_GAIN, KEY_OUTPUT_FOLDER, KEY_SYS_GAIN,
-    KEY_WHISPER_MODEL,
+    Settings, DEFAULT_AUTO_DELETE_DAYS, DEFAULT_MIC_GAIN, DEFAULT_SYS_GAIN, KEY_AUTO_DELETE_DAYS,
+    KEY_MIC_GAIN, KEY_OUTPUT_FOLDER, KEY_SYS_GAIN, KEY_WHISPER_MODEL,
 };
 use crate::storage;
 use crate::transcription::{self, SharedStatus};
@@ -67,6 +67,14 @@ impl AppState {
 
     pub fn sys_gain(&self) -> f32 {
         self.settings.get_f32(KEY_SYS_GAIN, DEFAULT_SYS_GAIN).clamp(0.0, 2.0)
+    }
+
+    /// Retention window in days. 0 means "never auto-delete".
+    pub fn auto_delete_days(&self) -> u32 {
+        self.settings
+            .get_or_default(KEY_AUTO_DELETE_DAYS, &DEFAULT_AUTO_DELETE_DAYS.to_string())
+            .parse()
+            .unwrap_or(DEFAULT_AUTO_DELETE_DAYS)
     }
 
     pub fn is_recording(&self) -> bool {

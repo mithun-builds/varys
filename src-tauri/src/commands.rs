@@ -4,7 +4,9 @@
 use crate::error::Error;
 use crate::model::{self, WhisperModel};
 use crate::recording::RecordingSession;
-use crate::settings::{KEY_MIC_GAIN, KEY_OUTPUT_FOLDER, KEY_SYS_GAIN, KEY_WHISPER_MODEL};
+use crate::settings::{
+    KEY_AUTO_DELETE_DAYS, KEY_MIC_GAIN, KEY_OUTPUT_FOLDER, KEY_SYS_GAIN, KEY_WHISPER_MODEL,
+};
 use crate::state::AppState;
 use crate::transcription::TranscriptionState;
 use crate::tray::{self, MeetingPlatform};
@@ -19,6 +21,7 @@ pub struct GeneralSettings {
     pub mic_gain: f32,
     pub sys_gain: f32,
     pub whisper_model: String,
+    pub auto_delete_days: u32,
 }
 
 #[tauri::command]
@@ -28,7 +31,21 @@ pub fn settings_general_get(state: State<'_, Arc<AppState>>) -> GeneralSettings 
         mic_gain: state.mic_gain(),
         sys_gain: state.sys_gain(),
         whisper_model: state.whisper_model().id().to_string(),
+        auto_delete_days: state.auto_delete_days(),
     }
+}
+
+#[tauri::command]
+pub fn settings_set_auto_delete_days(
+    state: State<'_, Arc<AppState>>,
+    days: u32,
+) -> Result<(), String> {
+    // Cap at 10 years to keep nonsense out of the DB.
+    let days = days.min(3650);
+    state
+        .settings
+        .set(KEY_AUTO_DELETE_DAYS, &days.to_string())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -221,8 +238,8 @@ pub struct RecordingEntry {
 }
 
 #[tauri::command]
-pub async fn start_recording(app: AppHandle) -> Result<(), String> {
-    toggle_start(&app).await.map_err(|e| e.to_string())
+pub async fn start_recording(app: AppHandle, name: Option<String>) -> Result<(), String> {
+    toggle_start(&app, name).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -232,7 +249,9 @@ pub async fn stop_recording(app: AppHandle) -> Result<(), String> {
 
 /// Single entry point used by both the tray "Start/Stop Recording" menu
 /// item and the frontend's manual buttons. Reads the current state and
-/// flips it.
+/// flips it. Tray-initiated starts pass `None` for the name (falls back to
+/// the "manual" slug); the Settings UI's named-start flow passes a real
+/// string when the input field is non-empty.
 pub async fn toggle_recording_internal(app: &AppHandle) -> Result<(), Error> {
     let state = match app.try_state::<Arc<AppState>>() {
         Some(s) => s.inner().clone(),
@@ -241,11 +260,11 @@ pub async fn toggle_recording_internal(app: &AppHandle) -> Result<(), Error> {
     if state.is_recording() {
         toggle_stop(app).await
     } else {
-        toggle_start(app).await
+        toggle_start(app, None).await
     }
 }
 
-async fn toggle_start(app: &AppHandle) -> Result<(), Error> {
+async fn toggle_start(app: &AppHandle, name: Option<String>) -> Result<(), Error> {
     let state = app
         .try_state::<Arc<AppState>>()
         .ok_or_else(|| Error::Audio("app state not ready".into()))?
@@ -257,10 +276,18 @@ async fn toggle_start(app: &AppHandle) -> Result<(), Error> {
     let out_dir = state.output_folder();
     let mic_gain = state.mic_gain();
     let sys_gain = state.sys_gain();
+    // Fall back to "manual" for empty / missing names so the filename always
+    // has a meaningful slug suffix. Trim whitespace so a stray space doesn't
+    // produce a weird filename.
+    let title = name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("manual");
     let session = RecordingSession::start(
         app,
         out_dir,
-        "manual",
+        title,
         MeetingPlatform::Unknown,
         mic_gain,
         sys_gain,

@@ -17,6 +17,12 @@ export function GeneralPane() {
   const [trState, setTrState] = useState<TranscriptionState>({ kind: "idle" });
   const [recordings, setRecordings] = useState<RecordingEntry[]>([]);
   const [busy, setBusy] = useState(false);
+  /// Pending recording name — typed before Start, kept while recording,
+  /// cleared after Stop so each session gets named fresh.
+  const [pendingName, setPendingName] = useState("");
+  /// Local mirror of the auto-delete slider so the typed value updates
+  /// instantly without waiting for the backend round-trip.
+  const [autoDeleteDays, setAutoDeleteDays] = useState<number | null>(null);
 
   const refresh = async () => {
     try {
@@ -30,6 +36,12 @@ export function GeneralPane() {
       setRec(rs);
       setTrState(ts);
       setRecordings(list);
+      // Only seed the local auto-delete value on first load; after that the
+      // user's edits are authoritative and re-syncing from the backend
+      // would clobber in-progress typing.
+      if (autoDeleteDays === null) {
+        setAutoDeleteDays(gs.auto_delete_days);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -70,8 +82,12 @@ export function GeneralPane() {
     try {
       if (rec.is_recording) {
         await tauri.stopRecording();
+        // Clear the name input on stop — next recording should be named
+        // fresh, not inherit the last session's label.
+        setPendingName("");
       } else {
-        await tauri.startRecording();
+        const name = pendingName.trim();
+        await tauri.startRecording(name || undefined);
       }
       await refresh();
     } catch (e) {
@@ -79,6 +95,18 @@ export function GeneralPane() {
       alert(`Recording error: ${e}`);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const updateAutoDelete = async (raw: number) => {
+    // Clamp UI-side so the user can't type 9999 and have it silently
+    // truncated by the backend.
+    const clamped = Math.max(0, Math.min(3650, Math.floor(raw)));
+    setAutoDeleteDays(clamped);
+    try {
+      await tauri.setAutoDeleteDays(clamped);
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -103,13 +131,33 @@ export function GeneralPane() {
             <span className="record-dot" />
             {busy ? "…" : rec.is_recording ? "Stop Recording" : "Start Recording"}
           </button>
-          <div className="record-meta">
-            {rec.is_recording
-              ? "Capturing mic + system audio"
-              : transcribing
-              ? "Idle (transcription running)"
-              : "Idle"}
-          </div>
+          <input
+            type="text"
+            className="name-input"
+            placeholder={
+              rec.is_recording
+                ? "Name this recording — used in filename on stop"
+                : "Recording name (optional)"
+            }
+            value={pendingName}
+            onChange={(e) => setPendingName(e.target.value)}
+            onKeyDown={(e) => {
+              // Quick-start from the name field: Enter while idle starts a
+              // recording with whatever's typed.
+              if (e.key === "Enter" && !rec.is_recording && !busy) {
+                e.preventDefault();
+                toggle();
+              }
+            }}
+            disabled={busy}
+          />
+        </div>
+        <div className="record-meta subtle">
+          {rec.is_recording
+            ? `Capturing mic + system audio${pendingName.trim() ? ` — “${pendingName.trim()}”` : ""}`
+            : transcribing
+            ? "Idle (transcription running)"
+            : "Idle"}
         </div>
       </div>
 
@@ -193,6 +241,30 @@ export function GeneralPane() {
             onChange={(e) => updateGain("sys_gain", parseFloat(e.target.value))}
           />
           <code className="gain-value">{s.sys_gain.toFixed(2)}</code>
+        </div>
+      </div>
+
+      <div className="pane-section">
+        <h2>Auto-delete</h2>
+        <div className="gain-row">
+          <label className="gain-label">Delete after</label>
+          <input
+            type="number"
+            min={0}
+            max={3650}
+            step={1}
+            className="days-input"
+            value={autoDeleteDays ?? 0}
+            onChange={(e) =>
+              updateAutoDelete(parseInt(e.target.value || "0", 10))
+            }
+          />
+          <span className="days-suffix">days</span>
+          <span className="days-status subtle">
+            {!autoDeleteDays || autoDeleteDays === 0
+              ? "Disabled — recordings kept forever"
+              : `Sweeps every 6 h. Deletes .wav / .txt / .json older than ${autoDeleteDays} day${autoDeleteDays === 1 ? "" : "s"}.`}
+          </span>
         </div>
       </div>
     </>

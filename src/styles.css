@@ -1289,3 +1289,58 @@ button.danger-btn:hover {
   flex-shrink: 0;
 }
 
+
+/* ── Recording name input + auto-delete control ───────────────────── */
+
+.record-card {
+  flex-wrap: wrap;
+}
+
+.name-input {
+  flex: 1;
+  min-width: 240px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  padding: 9px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  border-radius: 7px;
+  outline: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.name-input:focus {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+}
+.name-input:disabled {
+  opacity: 0.6;
+}
+.name-input::placeholder {
+  color: var(--fg-subtle);
+}
+
+.days-input {
+  width: 72px;
+  background: var(--bg-elev);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  border-radius: 7px;
+  text-align: right;
+}
+.days-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.days-suffix {
+  color: var(--fg-subtle);
+  font-size: 13px;
+  margin-right: 4px;
+}
+.days-status {
+  flex: 1;
+  font-size: 12.5px;
+}

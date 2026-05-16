@@ -1,6 +1,6 @@
 [package]
 name = "lord_varys"
-version = "0.2.1"
+version = "0.2.2"
 description = "Ambient meeting memory for macOS"
 authors = ["Mithun S"]
 edition = "2021"

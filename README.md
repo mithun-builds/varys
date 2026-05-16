@@ -19,6 +19,12 @@ Ambient AI memory for work — a tray-only macOS app that silently records virtu
 # Frontend deps
 pnpm install
 
+# One-time: create a self-signed code-signing cert in your Keychain so
+# every rebuild keeps the same codesign identity. Without this, macOS
+# treats every rebuild as a brand-new app and TCC grants (Microphone,
+# Screen Recording) don't persist.
+./scripts/setup-signing.sh
+
 # Build the Swift sidecar (required before tauri dev/build)
 cd src-tauri/swift-helper && swift build -c release && cd ../..
 mkdir -p src-tauri/binaries
@@ -28,7 +34,7 @@ cp src-tauri/swift-helper/.build/release/sckit_capture \
 # Run in dev mode
 pnpm tauri:dev
 
-# Production build
+# Production build (signs with the self-signed cert via tauri.conf.json)
 pnpm tauri:build
 ```
 

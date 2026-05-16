@@ -12,6 +12,12 @@ pub const KEY_ONBOARDING_DISMISSED: &str = "onboarding_dismissed";
 pub const KEY_MIC_PERMISSION_SEEN: &str = "mic_permission_seen";
 pub const KEY_SCREEN_PERMISSION_SEEN: &str = "screen_permission_seen";
 pub const KEY_HAS_RECORDED: &str = "has_recorded";
+/// Number of days a recording (.wav + .txt + .json) is kept before the
+/// background cleanup task deletes it. 0 = disabled. Stored as a string in
+/// the KV table; parsed to u32 at read time. Capped at 3650 (10 years) on
+/// write to keep silly values out.
+pub const KEY_AUTO_DELETE_DAYS: &str = "auto_delete_days";
+pub const DEFAULT_AUTO_DELETE_DAYS: u32 = 0;
 
 pub const DEFAULT_MIC_GAIN: f32 = 0.5;
 pub const DEFAULT_SYS_GAIN: f32 = 0.5;
